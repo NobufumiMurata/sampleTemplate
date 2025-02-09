@@ -1,0 +1,79 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/391ac389-24ae-40b4-9b47-0aa9d291ab67')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/391ac389-24ae-40b4-9b47-0aa9d291ab67')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "Scheduled",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "AiTM Detection Sample",
+                "description": "",
+                "severity": "Medium",
+                "enabled": true,
+                "query": "let lookupWindow = 5min;\nlet NonPhishResistantMFA = dynamic([\"Mobile app notification\", \"OATH verification code\", \"Text message\", \"Phone call approval (Authentication phone)\", \"Phone call approval (Alternate phone)\", \"Passwordless phone sign-in\", \"Phone call approval (Office phone)\", \"Passwordless Microsoft Authenticator\", \"Other\"]);​\nlet possibleAiTM = SigninLogs​​\n    | where RiskEventTypes has \"unfamiliarFeatures\"​\n    | where RiskState == \"remediated\"​\n    | mv-apply AuthenticationDetails = todynamic(AuthenticationDetails) to typeof(dynamic) on (​\n        where AuthenticationDetails.authenticationMethod has_any (NonPhishResistantMFA)​\n        | extend Method = AuthenticationDetails.authenticationMethod\n        )\n    | project-rename previousIPAddress=IPAddress, previousCreatedDateTime = CreatedDateTime;\npossibleAiTM\n| extend timekey = bin(previousCreatedDateTime, lookupWindow)\n| join kind=inner (\n    SigninLogs\n    | where AppDisplayName == \"OfficeHome\"\n    | where ResultType == 0\n    | project-rename nextIPAddress=IPAddress, nextCreatedDateTime = CreatedDateTime\n    | extend timekey = bin(nextCreatedDateTime, lookupWindow)\n    )\n    on timekey, UserPrincipalName\n| where previousIPAddress != nextIPAddress\n| where nextCreatedDateTime > previousCreatedDateTime\n| summarize arg_max(TimeGenerated, *) by TimeGenerated, UserPrincipalName\n| project\n    TimeGenerated,\n    Method,\n    UserPrincipalName,\n    UserId,\n    UserDisplayName,\n    AppDisplayName,\n    ClientAppUsed,\n    IPAddress=previousIPAddress,\n    LocationDetails,\n    MfaDetail,\n    RiskEventTypes,\n    RiskEventTypes_V2,\n    RiskState,\n    ResourceDisplayName,\n    UserAgent",
+                "queryFrequency": "PT30M",
+                "queryPeriod": "PT1H",
+                "triggerOperator": "GreaterThan",
+                "triggerThreshold": 0,
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "startTimeUtc": null,
+                "tactics": [
+                    "CredentialAccess"
+                ],
+                "techniques": [],
+                "subTechniques": [],
+                "alertRuleTemplateName": null,
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": false,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "PT5H",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": [],
+                        "groupByCustomDetails": []
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": {
+                    "alertDynamicProperties": []
+                },
+                "customDetails": {},
+                "entityMappings": [
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "AadUserId",
+                                "columnName": "UserId"
+                            }
+                        ]
+                    },
+                    {
+                        "entityType": "IP",
+                        "fieldMappings": [
+                            {
+                                "identifier": "Address",
+                                "columnName": "IPAddress"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}
